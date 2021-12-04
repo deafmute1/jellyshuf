@@ -1,0 +1,7 @@
+- Store password to keyring instead of plaintext.
+- more ranular control over shuffling
+- support albumartistsort=false
+- cache token to disk  + implement logout.
+- make script generally less barebones, add checks, better ui etc.
+- imrpove speed - cache results ?0
+- Allow setting mpd server details outside env vars

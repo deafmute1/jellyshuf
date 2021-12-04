@@ -1,0 +1,271 @@
+# standard library
+from typing import List, Dict, Generator
+import logging
+import random
+from typing import List 
+import requests
+import urllib.parse
+
+#internal
+from jellyshuf import settings
+
+
+""" This file contains modified source code from these files in mopidy-jellfin project:
+        - mopidy-jellyfin/mopidy_jellyfin/remote.py 
+        - mopidy-jellyfin/mopidy_jellyfin/http.py 
+    
+    See LICENSE-mopidy-jellyfin.
+"""
+
+logger = logging.getLogger(__name__)
+
+class HttpClient():
+    def __init__(self, headers, user_agent):
+        self.headers = headers
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
+        self.session.headers.update(user_agent)
+
+    def get(self, url):
+        # Perform HTTP Get to the provided URL
+        counter = 0
+        self.session.headers.update(self.headers)
+        while counter <= 5:
+
+            try:
+                r = self.session.get(url)
+                try:
+                    rv = r.json()
+                except Exception as e:
+                    logger.info(
+                        'Error parsing Jellyfin data: {}'.format(e)
+                    )
+                    rv = {}
+
+                logger.debug(str(rv))
+
+                return rv
+
+            except Exception as e:
+                logger.info(
+                    'Jellyfin connection on try {} with problem: {}'.format(
+                        counter, e
+                    )
+                )
+                counter += 1
+
+        raise Exception('Cant connect to Jellyfin API')
+
+    def post(self, url, payload={}):
+        # Perform HTTP Post to the provided URL
+        self.session.headers.update(self.headers)
+        r= {}
+        counter = 0
+        while counter <= 5:
+
+            try:
+                r = self.session.post(url, json=payload)
+                if r.text:
+                    rv = r.json()
+                else:
+                    rv = r.text
+
+                logger.debug(rv)
+
+                return rv
+
+            except Exception as e:
+                logger.info(
+                    'Jellyfin connection on try {} with problem: {}'.format(
+                        counter, e
+                    )
+                )
+                counter += 1
+
+        raise Exception('Cant connect to Jellyfin API. Resp: {}; url: {}; payload={}'.format(r, url, payload))
+
+    def delete(self, url):
+        # Perform HTTP Delete to the provided URL
+        counter = 0
+        self.session.headers.update(self.headers)
+        while counter <= 5:
+
+            try:
+                r = self.session.delete(url)
+
+                logger.debug(str(r))
+
+                return r
+
+            except Exception as e:
+                logger.info(
+                    'Jellyfin connection on try {} with problem: {}'.format(
+                        counter, e
+                    )
+                )
+                counter += 1
+
+        raise Exception('Cant connect to Jellyfin API')
+
+    def check_redirect(self, server):
+        # Perform HTTP Get to public endpoint to check for redirects
+        counter = 0
+        self.session.headers.update(self.headers)
+        path = '/system/info/public'
+
+        if 'http' not in server:
+            server = 'http://' + server
+
+        while counter <= 5:
+
+            try:
+                r = self.session.get(f'{server}{path}')
+                r.raise_for_status()
+
+                return r.url.replace(path, '')
+
+            except Exception as e:
+                logger.error(
+                    'Failed to reach Jellyfin public API on try {} with problem: {}'.format(
+                        counter, e
+                    )
+                )
+                counter += 1
+
+        raise Exception('Unable to find Jellyfin server, check hostname config')
+
+    def head(self, item_id, url):
+        # Used to verify if an image exists
+        try:
+            r = self.session.head(url)
+            r.raise_for_status()
+            return True
+        except:
+            logger.debug(f'No primary image found for item {item_id}')
+            return False 
+
+class CliClient(): 
+    def __init__(self, overwrite=False) -> None:
+        self.settings = settings.SettingsManager()
+        self.settings.get_settings_cli(overwrite) # required for below
+
+        self.user_agent = {'user-agent': '/'.join((self.settings.APPNAME, self.settings.APPVER))}
+        self.http = HttpClient(self._make_headers(), self.user_agent)
+        self.server_url = self.http.check_redirect(self.settings.data['url'])
+        self.user_id = None
+        self.token = None
+        
+        self._login()   
+        self.settings.get_view_cli(self.get_music_views(), overwrite) # requires login, but should be before any further api queries
+        self.settings.save()
+    
+    def _login(self) -> None: 
+        res = self.http.post(
+            self._make_api_url('/Users/AuthenticateByName'),  
+            {
+                'Username': self.settings.data['user'],
+                'Pw': self.settings.data['pass']
+            }
+        )
+        token = res.get('AccessToken')
+
+        if token:
+            self.user_id = res.get('User').get('Id')
+            self.http.session.headers.update({'x-mediabrowser-token': token})
+            self.token = token
+        else:
+            raise Exception('Unable to login to Jellyfin')
+
+    def _make_api_url(self, endpoint: str, params:dict={}) -> None:
+        scheme, netloc, path, query_string, fragment  = urllib.parse.urlsplit(self.server_url)
+        path = path + endpoint
+        
+        query_params = urllib.parse.parse_qs(query_string)
+        query_params['format'] = 'json'
+        query_params.update(params)
+        new_query_string = urllib.parse.urlencode(query_params, doseq=True)
+
+        return urllib.parse.urlunsplit((scheme, netloc, path, new_query_string, fragment))
+    
+    def _make_headers(self) -> dict: 
+        authorization = (
+            'MediaBrowser , '
+            'Client="{client}", '
+            'Device="{device}", '
+            'DeviceId="{device_id}", '
+            'Version="{version}"'
+        ).format(
+            client=self.settings.APPNAME,
+            device=self.settings.HOSTNAME,
+            device_id=self.settings.CLIENT_UUID, 
+            version=self.settings.APPVER
+        )
+
+        return  {'x-emby-authorization':  authorization}
+
+    def get_music_views(self) -> List[Dict[str, str]]: 
+        res = self.http.get(self._make_api_url('/Users/{}/Views'.format(self.user_id)))
+        return [{'Name': library.get('Name'), 'Id': library.get('Id')}   
+            for library in res.get('Items')
+            if library.get('CollectionType') == 'music'
+            ]
+    
+    def shuf_all_albums(self) -> Generator[str, None, None]: 
+        albums = self.http.get(self._make_api_url( 
+            '/Items',
+            {            
+                'UserId': self.user_id,
+                'ParentId': self.settings.data['ViewId'],
+                'IncludeItemTypes': 'MusicAlbum',
+                'Recursive': 'true'
+            }
+        ))['Items']
+
+        random.shuffle(albums)
+
+        for album in albums:
+            yield '{}/{}/{}'.format(
+                self.settings.MPD_PATH_PREFIX, 
+                album['AlbumArtist'], 
+                album['Name']
+            )
+
+
+    def shuf_all_artists(self) -> Generator[str, None, None]: 
+        artists = self.http.get(self._make_api_url(
+            '/Artists/AlbumArtists',
+            {
+                'ParentId': self.settings.data['ViewId'],
+                'UserId': self.user_id
+            }
+        ))['Items']
+
+        random.shuffle(artists)
+        for artist in artists: 
+            yield '{}/{}'.format(
+                self.settings.MPD_PATH_PREFIX, 
+                artist['Name']
+            )
+
+    def shuf_all_songs(self) -> Generator[str, None, None]: 
+        # this may be a very bad idea time wise. probably. 
+        songs = self.http.get(self._make_api_url(
+            '/Items', 
+            {
+                'UserId': self.user_id,
+                'ParentId': self.settings.data['ViewId'],
+                'IncludeItemTypes': 'Audio',
+                'Recursive': 'true'
+            }
+        ))['Items']
+
+        random.shuffle(songs) #wtf noo
+
+        for song in songs: 
+            yield '{}/{}/{}'.format(
+                self.settings.MPD_PATH_PREFIX, 
+                song['AlbumArtist'],
+                song['Album'],
+                song['Name']
+            )
+
