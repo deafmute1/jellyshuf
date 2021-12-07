@@ -43,20 +43,21 @@ def cli():
 
     while args[0].startswith('-'): 
         flag = args.pop(0).casefold()
-        if flag == '--stdout': 
-            add_to_mpd = False 
-        elif flag == '--config': 
-            jf = jellyfin.CliClient(overwrite=True)
-            return 
-        elif flag  == '--help': 
-            print(helpstr)
-            return
-        elif flag == '--start':
-            start_mpd = True 
-        elif flag == '--random': 
-            set_mpd_random = True 
-        elif flag == '--clear':
-            mpd_clear = True
+        if flag.startswith('--'):
+            if flag == '--stdout': 
+                add_to_mpd = False 
+            elif flag == '--config': 
+                jf = jellyfin.CliClient(overwrite=True)
+                return 
+            elif flag  == '--help': 
+                print(helpstr)
+                return
+            elif flag == '--start':
+                start_mpd = True 
+            elif flag == '--random': 
+                set_mpd_random = True 
+            elif flag == '--clear':
+                mpd_clear = True
         else:
             flag = flag[1:]
             while flag != '':
