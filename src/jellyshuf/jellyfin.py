@@ -14,7 +14,7 @@ from jellyshuf import settings
         - mopidy-jellyfin/mopidy_jellyfin/remote.py 
         - mopidy-jellyfin/mopidy_jellyfin/http.py 
     
-    See LICENSE-mopidy-jellyfin.
+    See LICENSE.
 """
 
 logger = logging.getLogger(__name__)

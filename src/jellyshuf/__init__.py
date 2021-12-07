@@ -12,12 +12,9 @@ import musicpd
 
 
 from jellyshuf import jellyfin
-
-""" Parts of this file are modified from mopidy-jellyfin. See LICENSE-mopidy-jellyfin.
-"""
-
 JSON = Union[str, int, float, bool, None, Mapping[str, 'JSON'], List['JSON']]
 logger = logging.getLogger(__name__)
+
 helpstr = '''
 USAGE: jellyshuf <FLAGS> TYPE NUMBER
     
