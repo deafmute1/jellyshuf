@@ -153,28 +153,37 @@ class CliClient():
         self.http = HttpClient(self._make_headers(), self.user_agent)
         self.server_url = self.http.check_redirect(self.settings.user['url'])
         self.user_id = None
-        self.token = None
         
         self._login()   
         self.settings.get_view_cli(self.get_music_views(), overwrite) # requires login, but should be before any further api queries
         self.settings.save_config()
     
     def _login(self) -> None: 
-        res = self.http.post(
-            self._make_api_url('/Users/AuthenticateByName'),  
-            {
-                'Username': self.settings.user['user'],
-                'Pw': self.settings.user['pass']
-            }
-        )
-        token = res.get('AccessToken')
-
-        if token:
-            self.user_id = res.get('User').get('Id')
+        token = self.settings.get_cache('token')
+        
+        if token is not None:
             self.http.session.headers.update({'x-mediabrowser-token': token})
-            self.token = token
-        else:
-            raise Exception('Unable to login to Jellyfin')
+            res = self.http.get( self._make_api_url('/User/Me'))
+            self.user_id = res.get('Id')
+        
+        if token is None and self.user_id is not None: 
+            res = self.http.post(
+                self._make_api_url('/Users/AuthenticateByName'),  
+                {
+                    'Username': self.settings.user['user'],
+                    'Pw': self.settings.user['pass']
+                }
+            )
+            token = res.get('AccessToken')
+
+            if token:
+                self.user_id = res.get('User').get('Id')
+                self.http.session.headers.update({'x-mediabrowser-token': token})
+                self.settings.save_cache('token', token)
+            else:
+                raise Exception('Unable to login to Jellyfin')
+        
+        
 
     def _make_api_url(self, endpoint: str, params:dict={}) -> None:
         scheme, netloc, path, query_string, fragment  = urllib.parse.urlsplit(self.server_url)

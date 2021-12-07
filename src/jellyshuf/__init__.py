@@ -59,7 +59,7 @@ def cli():
             elif flag == '--clear':
                 mpd_clear = True
         else:
-            flag = flag[1:]
+            flag = flag[1:] 
             while flag != '':
                 if flag == 'h': 
                     print(helpstr)
