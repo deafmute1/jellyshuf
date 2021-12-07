@@ -18,9 +18,10 @@ pip install .
 ```
 
 # Usage
-jellyshuf will asked for required information on first run (server url, username, password).
-This info is stored to `$XDG_CONFIG_DIR/jellyshuf/user.json`
-At the moment, the password is stored in plaintext in this file. In future, it will support use of keyrings.
+jellyshuf will asked for required information config info on first run (server url, username, password, cache settings).
+This info is stored to `$XDG_CONFIG_DIR/jellyshuf/user.json`. At the moment, the password is stored in plaintext in this file. In future, it will support use of keyrings.
+
+Note: This program currently requires the option `albumartistsort` in mopidy-jellyfin to be set to `true` (this is the default setting).
 
 `jellyshuf --help` 
 ```
@@ -33,6 +34,6 @@ FLAGS:
     --random|-r     Set mpd to random mode after adding new items
     --start|-s      Start mpd after adding new items
     --clear|-c      Clear mpd queue before adding items
-    --config        Run config (overwriting existing info if necessary) then exit
+    --config        Run config (overwriting any existing info) then exit
     --help|-h       Display this message and exit
 ```
