@@ -3,8 +3,8 @@ Essentially implements ncmpcpp's add random feature (default hotkey: `) through 
 jellyfin-mpd (and by proxy jellyfin-mopidy) does not implement the required mpd commands for this ncmpcpp function to work. 
 
 # Install
-## Arch Linux
-Coming soon.
+## Arch Linux (AUR)
+`paru -S jellyshuf` (or any other AUR helper) 
 
 ## Any system (pip)
 `pip install jellyshuf` 
