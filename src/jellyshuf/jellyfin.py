@@ -146,25 +146,25 @@ class HttpClient():
 
 class CliClient(): 
     def __init__(self, overwrite=False) -> None:
-        self.settings = settings.SettingsManager()
+        self.settings = settings.CliSettingsManager()
         self.settings.get_settings_cli(overwrite) # required for below
 
         self.user_agent = {'user-agent': '/'.join((self.settings.APPNAME, self.settings.APPVER))}
         self.http = HttpClient(self._make_headers(), self.user_agent)
-        self.server_url = self.http.check_redirect(self.settings.data['url'])
+        self.server_url = self.http.check_redirect(self.settings.user['url'])
         self.user_id = None
         self.token = None
         
         self._login()   
         self.settings.get_view_cli(self.get_music_views(), overwrite) # requires login, but should be before any further api queries
-        self.settings.save()
+        self.settings.save_config()
     
     def _login(self) -> None: 
         res = self.http.post(
             self._make_api_url('/Users/AuthenticateByName'),  
             {
-                'Username': self.settings.data['user'],
-                'Pw': self.settings.data['pass']
+                'Username': self.settings.user['user'],
+                'Pw': self.settings.user['pass']
             }
         )
         token = res.get('AccessToken')
@@ -211,61 +211,72 @@ class CliClient():
             ]
     
     def shuf_all_albums(self) -> Generator[str, None, None]: 
-        albums = self.http.get(self._make_api_url( 
-            '/Items',
-            {            
-                'UserId': self.user_id,
-                'ParentId': self.settings.data['ViewId'],
-                'IncludeItemTypes': 'MusicAlbum',
-                'Recursive': 'true'
-            }
-        ))['Items']
+        albums = self.settings.get_cache('albums')
+        
+        if albums is None: 
+            albums = self.http.get(self._make_api_url( 
+                '/Items',
+                {            
+                    'UserId': self.user_id,
+                    'ParentId': self.settings.user['ViewId'],
+                    'IncludeItemTypes': 'MusicAlbum',
+                    'Recursive': 'true'
+                }
+            ))['Items']
+            self.settings.save_cache('albums', albums)
 
         random.shuffle(albums)
 
         for album in albums:
             yield '{}/{}/{}'.format(
                 self.settings.MPD_PATH_PREFIX, 
-                album['AlbumArtist'], 
-                album['Name']
+                album['AlbumArtist'].translate(self.settings.TRANSLATE_MPD_PATH),
+                album['Name'].translate(self.settings.TRANSLATE_MPD_PATH)
             )
 
 
     def shuf_all_artists(self) -> Generator[str, None, None]: 
-        artists = self.http.get(self._make_api_url(
-            '/Artists/AlbumArtists',
-            {
-                'ParentId': self.settings.data['ViewId'],
-                'UserId': self.user_id
-            }
-        ))['Items']
+        artists = self.settings.get_cache('artists')
+
+        if artists is None:
+            artists = self.http.get(self._make_api_url(
+                '/Artists/AlbumArtists',
+                {
+                    'ParentId': self.settings.user['ViewId'],
+                    'UserId': self.user_id
+                }
+            ))['Items']
+            self.settings.save_cache('artists', artists)
 
         random.shuffle(artists)
         for artist in artists: 
             yield '{}/{}'.format(
                 self.settings.MPD_PATH_PREFIX, 
-                artist['Name']
+                artist['Name'].translate(self.settings.TRANSLATE_MPD_PATH)
             )
 
     def shuf_all_songs(self) -> Generator[str, None, None]: 
-        # this may be a very bad idea time wise. probably. 
-        songs = self.http.get(self._make_api_url(
-            '/Items', 
-            {
-                'UserId': self.user_id,
-                'ParentId': self.settings.data['ViewId'],
-                'IncludeItemTypes': 'Audio',
-                'Recursive': 'true'
-            }
-        ))['Items']
-
-        random.shuffle(songs) #wtf noo
+        songs = self.settings.get_cache('songs')
+        
+        if songs is None: 
+            songs = self.http.get(self._make_api_url(
+                '/Items', 
+                {
+                    'UserId': self.user_id,
+                    'ParentId': self.settings.user['ViewId'],
+                    'IncludeItemTypes': 'Audio',
+                    'Recursive': 'true'
+                }
+            ))['Items']
+            self.settings.save_cache('songs', songs)
+            
+        random.shuffle(songs) 
 
         for song in songs: 
             yield '{}/{}/{}'.format(
                 self.settings.MPD_PATH_PREFIX, 
-                song['AlbumArtist'],
-                song['Album'],
-                song['Name']
+                song['AlbumArtist'].translate(self.settings.TRANSLATE_MPD_PATH),
+                song['Album'].translate(self.settings.TRANSLATE_MPD_PATH),
+                song['Name'].translate(self.settings.TRANSLATE_MPD_PATH)
             )
 

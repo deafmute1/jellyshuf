@@ -1,4 +1,5 @@
 from getpass import getpass
+from os import stat
 import uuid 
 import socket 
 import logging 
@@ -6,11 +7,12 @@ import json
 from typing import Union, Mapping, List, Dict
 from pathlib import Path
 from appdirs import AppDirs
+import datetime
 
 JSON = Union[str, int, float, bool, None, Mapping[str, 'JSON'], List['JSON']]
 logger = logging.getLogger(__name__)
 
-class SettingsManager():
+class CliSettingsManager():
     def __init__(self) -> None:
         # preset constants
         self.APPNAME = 'jellyshuf'
@@ -19,53 +21,94 @@ class SettingsManager():
         self.CLIENT_UUID = str(uuid.uuid4())
         self.HOSTNAME = socket.gethostname()
         self.MPD_PATH_PREFIX = 'Jellyfin/Music' # do not include trailing slash
-        self.KEYS = ['url', 'user', 'pass', 'view'] # pass should be stored in keyring! eventually! maybe ..
+        self.TRANSLATE_MPD_PATH = {
+            ord('/'): None
+        }
+        self.DATEFMT = '%d/%m/%Y'
+        self.CONFIG_KEYS = ['url', 'user', 'pass', 'view', 'cache'] # pass should be stored in keyring! eventually! maybe ..
 
-        self.filepath = Path(AppDirs(self.APPNAME, self.AUTHOR).user_config_dir).joinpath("user.json")
+        dirs = AppDirs(self.APPNAME, self.AUTHOR)
+        self.userpath = Path(dirs.user_config_dir).joinpath("config.json")
+        self.cachepath = Path(dirs.user_cache_dir).joinpath('jfcache.json')
         
-        if self.filepath.exists():
-            with open(self.filepath, 'r') as cf: 
-                self.data =  json.load(cf) 
+        if self.userpath.is_file():
+            with open(self.userpath, 'r') as cf: 
+                try:    
+                    self.user =  json.load(cf)
+                except json.decoder.JSONDecodeError: 
+                    self.cache = {}
+                    self.cachepath.unlink() 
         else: 
-            self.data = {} 
-
-        for key in self.KEYS: 
-            try: 
-                _ = self.data[key]
-            except KeyError: 
-                self.data[key] = None
+            self.user = {} 
+    
+        if self.cachepath.is_file():
+            with open(self.cachepath, 'r') as f: 
+                try: 
+                    self.cache = json.load(f)
+                except json.decoder.JSONDecodeError: 
+                    self.cache = {}
+                    self.cachepath.unlink()
+        else: 
+            self.cache = {}
 
     def get_settings_cli(self, overwrite=False) -> None: 
-        if overwrite or self.data['url'] is None: 
+        def bool_to_str(s: str) -> bool: 
+            return s.lower() in ("yes", 'y', "true", "t", "1")
+        
+        if overwrite or self.user.get('url') is None: 
             url = str(input('Enter server url (including proto and port (if non-standard): '))
             if url.endswith('/'): 
                 url = url[:-1]
-            self.data['url'] = url
+            self.user['url'] = url
 
-        if overwrite or self.data['user'] is None: 
-            self.data['user'] = str(input('Enter jellyfin username: '))
+        if overwrite or self.user.get('user') is None: 
+            self.user['user'] = input('Enter jellyfin username: ')
 
-        if overwrite or self.data['pass'] is None: 
-            self.data['pass'] = str(getpass('Enter jellyfin password: '))
+        if overwrite or self.user.get('pass') is None: 
+            self.user['pass'] = getpass('Enter jellyfin password: ')
 
-        if self.data['url'].endswith('/'): 
-            self.data['url'] = self.data['url'][:-1]
-
+        if overwrite or self.user.get('cache') is None: 
+            self.user['cache'] = bool_to_str(input('Do you want to cache results from jellyfin api (yes/no): '))
+        
+        if self.user['cache'] and (overwrite or self.user.get('cachedays') is None): 
+            self.user['cachedays'] = int(input('How many days do you want to cache jellyfin data for (integer): '))
+            
     def get_view_cli(self, views: List[Dict[str, str]], overwrite=False):
         try: 
-            view = self.data['ViewId']
+            view = self.user['ViewId']
             if overwrite or view not in [e['Id'] for e in views]: 
                 raise KeyError 
         except KeyError: 
-            print("Please select a view. \n")
+            print("Please select a view.")
             for i, view in enumerate(views): 
                 print('    {}: {}'.format(i, view['Name']))
-            self.data['ViewId'] = views[int(input("Enter view index: "))]['Id']
-        
+            self.user['ViewId'] = views[int(input("Enter view index: "))]['Id']
+    
+    @staticmethod
+    def _touch_file(path: Path):
+        if not path.exists(): 
+            path.parent.mkdir(parents=True, exist_ok=True) 
+            path.touch()
 
-    def save(self) -> None:
-        if not self.filepath.exists(): 
-            self.filepath.parent.mkdir(parents=True, exist_ok=True) 
-            self.filepath.touch()
-        with open(self.filepath, 'w') as f: 
-            return json.dump(self.data, f)
+    def get_cache(self, key: str) -> Union[dict, None]: 
+        try: 
+            cache = self.cache[key]
+        except KeyError: 
+            return None 
+        if (datetime.datetime.today() - datetime.datetime.strptime(cache['date'], self.DATEFMT)).days < self.user['cachedays']: 
+            return cache['data']
+        return None
+
+    def save_cache(self, key: str, data: dict) -> None: 
+        self._touch_file(self.cachepath)
+        self.cache[key] = {
+            'date': datetime.date.today().strftime(self.DATEFMT),
+            'data': data
+        }
+        with open(self.cachepath, 'w') as f: 
+            json.dump(self.cache, f)
+
+    def save_config(self) -> None:
+        self._touch_file(self.userpath)
+        with open(self.userpath, 'w') as f: 
+            json.dump(self.user, f)

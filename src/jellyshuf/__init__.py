@@ -21,24 +21,29 @@ logger = logging.getLogger(__name__)
 helpstr = '''
 USAGE: jellyshuf <FLAGS> TYPE NUMBER
     
-TYPE is one of artists, albums, songs (will take forever)
+TYPE is one of artists, albums, songs 
     
 FLAGS: 
     --stdout        Instead of adding retrieved paths to mpd queue, emits them to stdout (line separated)
-    --random|-r     Set mpd to random mode
+    --random|-r     Set mpd to random mode after adding new items
     --start|-s      Start mpd after adding new items
+    --clear|-c      Clear mpd queue before adding items
     --config        Run config (overwriting existing info if necessary) then exit
     --help|-h       Display this message and exit
 '''
 
-
-def cli(): 
+def cli():
     add_to_mpd = True
     start_mpd = False
     set_mpd_random = False
+    mpd_clear = False
     args = argv[1:] # discard binary/file name
+    
+    if len(args) < 2:
+        print("ERROR: Not enough args") 
+        print(helpstr)
+        return
 
-    # consume flags
     while args[0].startswith('-'): 
         flag = args.pop(0).casefold()
         if flag == '--stdout': 
@@ -46,13 +51,31 @@ def cli():
         elif flag == '--config': 
             jf = jellyfin.CliClient(overwrite=True)
             return 
-        elif flag in ('--help', '-h'): 
+        elif flag  == '--help': 
             print(helpstr)
             return
-        elif flag in ('--start', '-s'):
+        elif flag == '--start':
             start_mpd = True 
-        elif flag in ('--random', 'r'):
-            set_mpd_random = True
+        elif flag == '--random': 
+            set_mpd_random = True 
+        elif flag == '--clear':
+            mpd_clear = True
+        else:
+            flag = flag[1:]
+            while flag != '':
+                if flag == 'h': 
+                    print(helpstr)
+                    return
+                elif flag == 's':
+                    start_mpd = True 
+                elif flag == 'r':
+                    set_mpd_random = True
+                elif flag == 'h': 
+                    print(helpstr)
+                    return
+                elif flag == 'c': 
+                    mpd_clear = True
+                flag = flag[1:]
 
     mpd = musicpd.MPDClient()
     mpd.connect()
@@ -64,18 +87,28 @@ def cli():
         gen = jf.shuf_all_artists()
     elif args[0].casefold() == 'songs'.casefold(): 
         gen = jf.shuf_all_songs()
-    else: 
+    else:
+        print("ERROR: Invalid argument for type") 
         print(helpstr)
+        return
+    
+    if mpd_clear:
+        mpd.clear()
 
-    for path in itertools.islice(gen, int(args[1])):
-        if add_to_mpd: 
-            print(f'Adding {path}')
-            mpd.add(path)
-        else: 
+    if add_to_mpd:
+        for path in itertools.islice(gen, int(args[1])):
+            try: 
+                mpd.add(path)
+                print(f'Added {path}')
+            except musicpd.CommandError as e: 
+                print('Failed to add {}'.format(path))
+                print(str(e))
+    else: 
+        for path in itertools.islice(gen, int(args[1])):
             print('{}'.format(path))
 
     if set_mpd_random: 
-        mpd.random(1)
+        mpd.random()
     if start_mpd: 
         mpd.play()
 
