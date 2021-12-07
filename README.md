@@ -21,16 +21,18 @@ pip install .
 jellyshuf will asked for required information on first run (server url, username, password).
 This info is stored to `$XDG_CONFIG_DIR/jellyshuf/user.json`
 At the moment, the password is stored in plaintext in this file. In future, it will support use of keyrings.
+
 `jellyshuf --help` 
 ```
 USAGE: jellyshuf <FLAGS> TYPE NUMBER
     
-TYPE is one of artists, albums, songs (will take forever)
+TYPE is one of artists, albums, songs 
     
 FLAGS: 
     --stdout        Instead of adding retrieved paths to mpd queue, emits them to stdout (line separated)
-    --random|-r     Set mpd to random mode
+    --random|-r     Set mpd to random mode after adding new items
     --start|-s      Start mpd after adding new items
+    --clear|-c      Clear mpd queue before adding items
     --config        Run config (overwriting existing info if necessary) then exit
     --help|-h       Display this message and exit
 ```
