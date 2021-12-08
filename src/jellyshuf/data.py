@@ -59,7 +59,7 @@ class PersistantDataManager():
         self.user = {**self.DEFAULT_CONFIG, **self.user} # use defaults if no value stored to disk
 
         self.use_keyring = self.user['use_keyring']
-        if not HAS_KEYRING: 
+        if not HAS_KEYRING: # use this instance var instead of updating config value on disk so that if keyring later becomes avilable it will be used
             self.use_keyring = False 
         if self.user['set_keyring'] is not None: 
             keyring.set_keyring(self.user['set_keyring'])
@@ -75,7 +75,7 @@ class PersistantDataManager():
             self.cache = {}
 
     def set_user_cli(self, overwrite=False) -> None: 
-        def bool_to_str(s: str) -> bool: 
+        def str_to_bool(s: str) -> bool: 
             return s.lower() in ("yes", 'y', "true", "t", "1")
         
         if overwrite or self.user.get('url') is None: 
@@ -94,8 +94,19 @@ class PersistantDataManager():
             passw = getpass('Enter jellyfin password: ')
             if self.use_keyring:
                 keyring.set_password(self.APPNAME,  self.user['user'], passw)
-            else: 
-                self.user['pass'] = passw
+                # fallback.
+                if keyring.get_password(self.APPNAME, self.user['user'], 'passw') != passw: 
+                    print("WARNING: Failed to access system keyring to store password. Password will be stored in plaintext")
+                    if str_to_bool(input("Continue? (yes/no): ")):
+                        self.use_keyring = False
+                        # enforce this as a config-on-disk value as otherwise user will be force to re-enter and then reconfirm plaintext password on each run
+                        self.user['use_keyring'] = False 
+                        self.user['pass'] = passw
+            else:
+                print("WARNING: use_keyring option set to false. Password will be stored in plaintext")
+                if str_to_bool(input("Continue? (yes/no): ")):
+                    self.user['use_keyring'] = False 
+                    self.user['pass'] = passw
 
     def get_password(self) -> str: 
         if self.use_keyring:
