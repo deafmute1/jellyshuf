@@ -11,7 +11,7 @@ import itertools
 import musicpd
 
 
-from jellyshuf import jellyfin
+from jellyshuf import jellyfin, data
 JSON = Union[str, int, float, bool, None, Mapping[str, 'JSON'], List['JSON']]
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,8 @@ FLAGS:
     --start|-s      Start mpd after adding new items
     --clear|-c      Clear mpd queue before adding items
     --config        Run config (overwriting any existing info) then exit
+    --empty-config  Generate an empty config file at config location.
+    --version       Print version and exit
     --help|-h       Display this message and exit
 '''
 
@@ -35,11 +37,6 @@ def cli():
     set_mpd_random = False
     mpd_clear = False
     args = argv[1:] # discard binary/file name
-    
-    if len(args) < 2:
-        print("ERROR: Not enough args") 
-        print(helpstr)
-        return
 
     while args[0].startswith('-'): 
         flag = args.pop(0).casefold()
@@ -58,6 +55,14 @@ def cli():
                 set_mpd_random = True 
             elif flag == '--clear':
                 mpd_clear = True
+            elif flag == '--empty-config': 
+                s = data.PersistantDataManager()
+                s.user = s.DEFAULT_CONFIG 
+                s.save_config()
+                return
+            elif flag == '--version':
+                print(data.PersistantDataManager().APPVER)
+                return
         else:
             flag = flag[1:] 
             while flag != '':
@@ -75,8 +80,10 @@ def cli():
                     mpd_clear = True
                 flag = flag[1:]
 
+
+    d = data.PersistantDataManager()
     mpd = musicpd.MPDClient()
-    mpd.connect()
+    mpd.connect(d.user['mpd_host'], d.user['mpd_port'])
     jf = jellyfin.CliClient()
 
     if args[0].casefold() == 'albums'.casefold(): 

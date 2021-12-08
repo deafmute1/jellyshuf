@@ -9,14 +9,20 @@ from pathlib import Path
 from appdirs import AppDirs
 import datetime
 
+try: 
+    import keyring 
+    HAS_KEYRING = True
+except ModuleNotFoundError: 
+    HAS_KEYRING = False
+
 JSON = Union[str, int, float, bool, None, Mapping[str, 'JSON'], List['JSON']]
 logger = logging.getLogger(__name__)
 
-class CliSettingsManager():
+class PersistantDataManager():
     def __init__(self) -> None:
         # preset constants
         self.APPNAME = 'jellyshuf'
-        self.APPVER = '0.1.1' 
+        self.APPVER = '0.1.1'
         self.AUTHOR = 'def'
         self.CLIENT_UUID = str(uuid.uuid4())
         self.HOSTNAME = socket.gethostname()
@@ -25,8 +31,20 @@ class CliSettingsManager():
             ord('/'): None
         }
         self.DATEFMT = '%d/%m/%Y'
-        self.CONFIG_KEYS = ['url', 'user', 'pass', 'view', 'cache'] # pass should be stored in keyring! eventually! maybe ..
-
+        self.DEFAULT_CONFIG = {
+            'url': None, 
+            'user': None, 
+            'pass': None, # None indicates no passwd yet OR that keyring is being used.
+            'view': None, 
+            'cache': True, 
+            'cache_token': True,
+            'cache_days': 10,
+            'use_keyring': True,
+            'set_keyring': None,
+            'mpd_host': None, 
+            'mpd_port': None
+        }
+        
         dirs = AppDirs(self.APPNAME, self.AUTHOR)
         self.userpath = Path(dirs.user_config_dir).joinpath("config.json")
         self.cachepath = Path(dirs.user_cache_dir).joinpath('jfcache.json')
@@ -36,10 +54,15 @@ class CliSettingsManager():
                 try:    
                     self.user =  json.load(cf)
                 except json.decoder.JSONDecodeError: 
-                    self.cache = {}
+                    self.user = {}
                     self.cachepath.unlink() 
-        else: 
-            self.user = {} 
+        self.user = {**self.DEFAULT_CONFIG, **self.user} # use defaults if no value stored to disk
+
+        self.use_keyring = self.user['use_keyring']
+        if not HAS_KEYRING: 
+            self.use_keyring = False 
+        if self.user['set_keyring'] is not None: 
+            keyring.set_keyring(self.user['set_keyring'])
     
         if self.cachepath.is_file():
             with open(self.cachepath, 'r') as f: 
@@ -51,12 +74,12 @@ class CliSettingsManager():
         else: 
             self.cache = {}
 
-    def get_settings_cli(self, overwrite=False) -> None: 
+    def set_user_cli(self, overwrite=False) -> None: 
         def bool_to_str(s: str) -> bool: 
             return s.lower() in ("yes", 'y', "true", "t", "1")
         
         if overwrite or self.user.get('url') is None: 
-            url = str(input('Enter server url (including proto and port (if non-standard): '))
+            url = str(input('Enter jellyfin server url (include protocol and port (if not implied by protocol)): '))
             if url.endswith('/'): 
                 url = url[:-1]
             self.user['url'] = url
@@ -64,16 +87,23 @@ class CliSettingsManager():
         if overwrite or self.user.get('user') is None: 
             self.user['user'] = input('Enter jellyfin username: ')
 
-        if overwrite or self.user.get('pass') is None: 
-            self.user['pass'] = getpass('Enter jellyfin password: ')
+        if (overwrite 
+            or (not self.use_keyring and self.user.get('pass') is None) 
+            or (self.use_keyring and keyring.get_password(self.APPNAME, self.user['user']) is None) 
+        ):
+            passw = getpass('Enter jellyfin password: ')
+            if self.use_keyring:
+                keyring.set_password(self.APPNAME,  self.user['user'], passw)
+            else: 
+                self.user['pass'] = passw
 
-        if overwrite or self.user.get('cache') is None: 
-            self.user['cache'] = bool_to_str(input('Do you want to cache results from jellyfin api (yes/no): '))
-        
-        if self.user['cache'] and (overwrite or self.user.get('cachedays') is None): 
-            self.user['cachedays'] = int(input('How many days do you want to cache jellyfin data for (integer): '))
-            
-    def get_view_cli(self, views: List[Dict[str, str]], overwrite=False):
+    def get_password(self) -> str: 
+        if self.use_keyring:
+            return keyring.get_password(self.APPNAME, self.user['user'])
+        else: 
+            return self.user['pass']
+    
+    def set_view_cli(self, views: List[Dict[str, str]], overwrite=False):
         try: 
             view = self.user['ViewId']
             if overwrite or view not in [e['Id'] for e in views]: 
@@ -90,16 +120,31 @@ class CliSettingsManager():
             path.parent.mkdir(parents=True, exist_ok=True) 
             path.touch()
 
-    def get_cache(self, key: str) -> Union[dict, None]: 
-        try: 
-            cache = self.cache[key]
-        except KeyError: 
+    def get_cache(self, key: str) -> Union[dict, None]:
+        if not self.user['cache']:
+            return None
+        
+        cache_days = self.user['cache_days']
+        if key == 'token':
+            if not self.user['cache_token']:
+                return None
+            cache_days = 1
+            
+        cache = self.cache.get(key) 
+        if cache is None: 
             return None 
-        if (datetime.datetime.today() - datetime.datetime.strptime(cache['date'], self.DATEFMT)).days < self.user['cachedays']: 
+        
+        if (datetime.datetime.today() - datetime.datetime.strptime(cache['date'], self.DATEFMT)).days < cache_days: 
             return cache['data']
+        else: 
+            self.cache[key] = None 
+            
         return None
 
     def save_cache(self, key: str, data: dict) -> None: 
+        if not self.user['cache']: 
+            return
+
         self._touch_file(self.cachepath)
         self.cache[key] = {
             'date': datetime.date.today().strftime(self.DATEFMT),

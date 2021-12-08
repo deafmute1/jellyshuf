@@ -7,7 +7,7 @@ import requests
 import urllib.parse
 
 #internal
-from jellyshuf import settings
+from jellyshuf import data 
 
 
 """ This file contains modified source code from these files in mopidy-jellfin project:
@@ -146,8 +146,8 @@ class HttpClient():
 
 class CliClient(): 
     def __init__(self, overwrite=False) -> None:
-        self.settings = settings.CliSettingsManager()
-        self.settings.get_settings_cli(overwrite) # required for below
+        self.settings = data.PersistantDataManager() 
+        self.settings.set_user_cli(overwrite) # required for below
 
         self.user_agent = {'user-agent': '/'.join((self.settings.APPNAME, self.settings.APPVER))}
         self.http = HttpClient(self._make_headers(), self.user_agent)
@@ -155,35 +155,36 @@ class CliClient():
         self.user_id = None
         
         self._login()   
-        self.settings.get_view_cli(self.get_music_views(), overwrite) # requires login, but should be before any further api queries
+        self.settings.set_view_cli(self.get_music_views(), overwrite) # requires login, but should be before any further api queries
         self.settings.save_config()
     
     def _login(self) -> None: 
         token = self.settings.get_cache('token')
         
-        if token is not None:
+        if token is not None: #attempt to connect on valid token
             self.http.session.headers.update({'x-mediabrowser-token': token})
-            res = self.http.get( self._make_api_url('/User/Me'))
+            res = self.http.get(self._make_api_url('/User/Me'))
             self.user_id = res.get('Id')
+        elif self.settings.cache.get('token') is not None: # logout if outdated
+            self.http.session.headers.update({'x-mediabrowser-token': self.settings.cache['token']})
+            self.http.post(self._make_api_url('/Sessions/Logout'))
         
-        if token is None and self.user_id is not None: 
+        if token is None or self.user_id is None:
             res = self.http.post(
                 self._make_api_url('/Users/AuthenticateByName'),  
                 {
                     'Username': self.settings.user['user'],
-                    'Pw': self.settings.user['pass']
+                    'Pw': self.settings.get_password()
                 }
             )
             token = res.get('AccessToken')
 
-            if token:
+            if token is not None:
                 self.user_id = res.get('User').get('Id')
                 self.http.session.headers.update({'x-mediabrowser-token': token})
                 self.settings.save_cache('token', token)
             else:
                 raise Exception('Unable to login to Jellyfin')
-        
-        
 
     def _make_api_url(self, endpoint: str, params:dict={}) -> None:
         scheme, netloc, path, query_string, fragment  = urllib.parse.urlsplit(self.server_url)
