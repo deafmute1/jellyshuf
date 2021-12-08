@@ -1,5 +1,2 @@
-- Store password to keyring instead of plaintext.
 - more ways/options to shuffle music into queue 
 - support albumartistsort=false
-- implement logout (?)
-- Allow setting mpd server details outside env vars

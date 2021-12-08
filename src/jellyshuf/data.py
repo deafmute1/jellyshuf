@@ -22,7 +22,7 @@ class PersistantDataManager():
     def __init__(self) -> None:
         # preset constants
         self.APPNAME = 'jellyshuf'
-        self.APPVER = '0.1.1'
+        self.APPVER = '0.2.0'
         self.AUTHOR = 'def'
         self.CLIENT_UUID = str(uuid.uuid4())
         self.HOSTNAME = socket.gethostname()

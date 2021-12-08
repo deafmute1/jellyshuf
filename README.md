@@ -19,9 +19,13 @@ pip install .
 
 # Usage
 jellyshuf will asked for required information config info on first run (server url, username, password, cache settings).
-This info is stored to `$XDG_CONFIG_DIR/jellyshuf/user.json`. At the moment, the password is stored in plaintext in this file. In future, it will support use of keyrings.
+Some advanced config options are not exposed via `jellyshuf --config`. You can edit these manually. You can use `--empty-config` to generate all options with their defaults at the config location.
+The config file is located at  `$XDG_CONFIG_DIR/jellyshuf/config.json`. 
+The jellyfin password is by default stored to the system keyring if available.
 
-Note: This program currently requires the option `albumartistsort` in mopidy-jellyfin to be set to `true` (this is the default setting).
+Please note there is some time required to fetch items from jellyfin when they have not yet been cached to disk. This is mainly noticable with using `songs`; on large libraries there may be notcable lag even when using disk cache.
+
+This program currently requires the option `albumartistsort` in mopidy-jellyfin to be set to `true` (this is the default setting).
 
 `jellyshuf --help` 
 ```
@@ -35,5 +39,7 @@ FLAGS:
     --start|-s      Start mpd after adding new items
     --clear|-c      Clear mpd queue before adding items
     --config        Run config (overwriting any existing info) then exit
+    --empty-config  Generate an empty config file at config location.
+    --version       Print version and exit
     --help|-h       Display this message and exit
 ```
