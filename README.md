@@ -34,12 +34,14 @@ USAGE: jellyshuf <FLAGS> TYPE NUMBER
 TYPE is one of artists, albums, songs 
     
 FLAGS: 
-    --stdout        Instead of adding retrieved paths to mpd queue, emits them to stdout (line separated)
-    --random|-r     Set mpd to random mode after adding new items
-    --start|-s      Start mpd after adding new items
-    --clear|-c      Clear mpd queue before adding items
-    --config        Run config (overwriting any existing info) then exit
-    --empty-config  Generate an empty config file at config location.
-    --version       Print version and exit
-    --help|-h       Display this message and exit
+    --stdout            Instead of adding retrieved paths to mpd queue, emits them to stdout (line separated)
+    --interactive|-i    If not in stdout mode, interactively confirms albums before adding them;
+                            jellyshuf runs until NUMBER has been added to queue.
+    --random|-r         Set mpd to random mode after adding new items
+    --start|-s          Start mpd after adding new items
+    --clear|-c          Clear mpd queue before adding items
+    --config            Run config (overwriting any existing info) then exit
+    --empty-config      Generate an empty config file at config location.
+    --version           Print version and exit
+    --help|-h           Display this message and exit
 ```

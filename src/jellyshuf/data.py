@@ -15,6 +15,9 @@ try:
 except ModuleNotFoundError: 
     HAS_KEYRING = False
 
+from jellyshuf.shared import str_to_bool
+
+
 JSON = Union[str, int, float, bool, None, Mapping[str, 'JSON'], List['JSON']]
 logger = logging.getLogger(__name__)
 
@@ -75,9 +78,6 @@ class PersistantDataManager():
             self.cache = {}
 
     def set_user_cli(self, overwrite=False) -> None: 
-        def str_to_bool(s: str) -> bool: 
-            return s.lower() in ("yes", 'y', "true", "t", "1")
-        
         if overwrite or self.user.get('url') is None: 
             url = str(input('Enter jellyfin server url (include protocol and port (if not implied by protocol)): '))
             if url.endswith('/'): 

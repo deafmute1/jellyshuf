@@ -6,12 +6,15 @@ import logging
 from typing import Union, Mapping, List
 from sys import argv
 import itertools 
+from pathlib import Path
 
 # pip installable
 import musicpd
 
 
 from jellyshuf import jellyfin, data
+from jellyshuf.shared import str_to_bool
+
 JSON = Union[str, int, float, bool, None, Mapping[str, 'JSON'], List['JSON']]
 logger = logging.getLogger(__name__)
 
@@ -21,21 +24,23 @@ USAGE: jellyshuf <FLAGS> TYPE NUMBER
 TYPE is one of artists, albums, songs 
     
 FLAGS: 
-    --stdout        Instead of adding retrieved paths to mpd queue, emits them to stdout (line separated)
-    --random|-r     Set mpd to random mode after adding new items
-    --start|-s      Start mpd after adding new items
-    --clear|-c      Clear mpd queue before adding items
-    --config        Run config (overwriting any existing info) then exit
-    --empty-config  Generate an empty config file at config location.
-    --version       Print version and exit
-    --help|-h       Display this message and exit
+    --stdout            Instead of adding retrieved paths to mpd queue, emits them to stdout (line separated)
+    --interactive|-i    If not in stdout mode, interactively confirms albums before adding them;
+                            jellyshuf runs until NUMBER has been added to queue.
+    --random|-r         Set mpd to random mode after adding new items
+    --start|-s          Start mpd after adding new items
+    --clear|-c          Clear mpd queue before adding items
+    --config            Run config (overwriting any existing info) then exit
+    --empty-config      Generate an empty config file at config location.
+    --version           Print version and exit
+    --help|-h           Display this message and exit
 '''
-
-def cli():
+def cli() -> None:
     add_to_mpd = True
     start_mpd = False
     set_mpd_random = False
     mpd_clear = False
+    interactive = False
     args = argv[1:] # discard binary/file name
 
     while args[0].startswith('-'): 
@@ -63,6 +68,8 @@ def cli():
             elif flag == '--version':
                 print(data.PersistantDataManager().APPVER)
                 return
+            elif flag == '--interactive':
+                interactive = True 
         else:
             flag = flag[1:] 
             while flag != '':
@@ -78,8 +85,9 @@ def cli():
                     return
                 elif flag == 'c': 
                     mpd_clear = True
+                elif flag == 'i': 
+                    interactive = True
                 flag = flag[1:]
-
 
     d = data.PersistantDataManager()
     mpd = musicpd.MPDClient()
@@ -99,9 +107,20 @@ def cli():
     
     if mpd_clear:
         mpd.clear()
-
+        
+    def add(path: Path) -> None: 
+        try: 
+            mpd.add(path)
+            print(f'Added {path}')
+        except musicpd.CommandError as e: 
+            print('Failed to add {}'.format(path))
+            print(str(e))
+            
     if add_to_mpd:
         for path in itertools.islice(gen, int(args[1])):
+            if interactive: 
+                while not str_to_bool(input("Would you like to add {} to queue (y/n)? ".format(path))): 
+                    path = next(gen) 
             try: 
                 mpd.add(path)
                 print(f'Added {path}')
@@ -110,7 +129,7 @@ def cli():
                 print(str(e))
     else: 
         for path in itertools.islice(gen, int(args[1])):
-            print('{}'.format(path))
+            print(path)
 
     if set_mpd_random: 
         mpd.random()
