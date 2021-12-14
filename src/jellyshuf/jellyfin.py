@@ -283,7 +283,7 @@ class CliClient():
         random.shuffle(songs) 
 
         for song in songs: 
-            yield '{}/{}/{}'.format(
+            yield '{}/{}/{}/{}'.format(
                 self.settings.MPD_PATH_PREFIX, 
                 song['AlbumArtist'].translate(self.settings.TRANSLATE_MPD_PATH),
                 song['Album'].translate(self.settings.TRANSLATE_MPD_PATH),
